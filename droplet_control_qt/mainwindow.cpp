@@ -224,7 +224,12 @@ QGroupBox *MainWindow::buildParamGroup()
     jogStepSpinBox = new QDoubleSpinBox;
     jogStepSpinBox->setRange(0.1, 50.0); jogStepSpinBox->setValue(5.0);
     jogStepSpinBox->setSuffix(" mm");
-    vl->addWidget(makeParamRow("点动步长:", jogStepSpinBox));
+    vl->addWidget(makeParamRow("滑台步长:", jogStepSpinBox));
+
+    gripperStepSpinBox = new QDoubleSpinBox;
+    gripperStepSpinBox->setRange(1.0, 200.0); gripperStepSpinBox->setValue(15.0);
+    gripperStepSpinBox->setDecimals(0);
+    vl->addWidget(makeParamRow("夹爪步长:", gripperStepSpinBox));
 
     gripForceSpinBox = new QSpinBox;
     gripForceSpinBox->setRange(1, 100); gripForceSpinBox->setValue(10);
@@ -302,12 +307,25 @@ MainWindow::MainWindow(QWidget *parent)
     connect(gripperOpenBtn,  &QPushButton::released, this, &MainWindow::onGripperOpenReleased);
     connect(gripperCloseBtn, &QPushButton::pressed,  this, &MainWindow::onGripperClosePressed);
     connect(gripperCloseBtn, &QPushButton::released, this, &MainWindow::onGripperCloseReleased);
+
+    // 三轴点动按钮信号
+    connect(jogXPlusBtn,  &QPushButton::clicked, this, &MainWindow::onJogXPlus);
+    connect(jogXMinusBtn, &QPushButton::clicked, this, &MainWindow::onJogXMinus);
+    connect(jogYPlusBtn,  &QPushButton::clicked, this, &MainWindow::onJogYPlus);
+    connect(jogYMinusBtn, &QPushButton::clicked, this, &MainWindow::onJogYMinus);
+    connect(jogZPlusBtn,  &QPushButton::clicked, this, &MainWindow::onJogZPlus);
+    connect(jogZMinusBtn, &QPushButton::clicked, this, &MainWindow::onJogZMinus);
+    connect(homeBtn,      &QPushButton::clicked, this, &MainWindow::onHome);
+
+    initSliderSerial();
 }
 
 MainWindow::~MainWindow()
 {
     if (gripperSerial && gripperSerial->isOpen())
         gripperSerial->close();
+    if (sliderSerial && sliderSerial->isOpen())
+        sliderSerial->close();
 }
 
 // ── 夹爪串口初始化 ───────────────────────────────────────────────────
@@ -391,7 +409,8 @@ void MainWindow::onGripperCloseReleased()
 
 void MainWindow::doGripperOpen()
 {
-    gripperPosition = qMin(gripperPosition + 15, 1000);
+    int step = (int)gripperStepSpinBox->value();
+    gripperPosition = qMin(gripperPosition + step, 1000);
     sendModbus(0x0101, (quint16)gripForceSpinBox->value());
     QThread::msleep(20);
     sendModbus(0x0104, 10);
@@ -401,10 +420,122 @@ void MainWindow::doGripperOpen()
 
 void MainWindow::doGripperClose()
 {
-    gripperPosition = qMax(gripperPosition - 15, 0);
+    int step = (int)gripperStepSpinBox->value();
+    gripperPosition = qMax(gripperPosition - step, 0);
     sendModbus(0x0101, (quint16)gripForceSpinBox->value());
     QThread::msleep(20);
     sendModbus(0x0104, 10);
     QThread::msleep(20);
     sendModbus(0x0103, (quint16)gripperPosition);
+}
+
+// ── 三轴串口初始化 ───────────────────────────────────────────────────
+void MainWindow::initSliderSerial()
+{
+    sliderSerial = new QSerialPort(this);
+    sliderSerial->setPortName("/dev/ttyUSB1");
+    sliderSerial->setBaudRate(QSerialPort::Baud115200);
+    sliderSerial->setDataBits(QSerialPort::Data8);
+    sliderSerial->setParity(QSerialPort::NoParity);
+    sliderSerial->setStopBits(QSerialPort::OneStop);
+    sliderSerial->setFlowControl(QSerialPort::NoFlowControl);
+    sliderBusy = false;
+
+    connect(sliderSerial, &QSerialPort::readyRead, this, &MainWindow::onSliderReadyRead);
+
+    if (!sliderSerial->open(QIODevice::ReadWrite)) {
+        statusBar()->showMessage("三轴串口打开失败: " + sliderSerial->errorString());
+        for (auto *b : {jogXPlusBtn, jogXMinusBtn, jogYPlusBtn,
+                        jogYMinusBtn, jogZPlusBtn, jogZMinusBtn, homeBtn})
+            b->setEnabled(false);
+        return;
+    }
+
+    sliderSerial->setDataTerminalReady(false);
+    sliderSerial->setRequestToSend(false);
+    statusBar()->showMessage("三轴串口已连接 /dev/ttyUSB1，等待 ESP32 就绪...");
+}
+
+void MainWindow::sliderSend(const QString &cmd)
+{
+    if (!sliderSerial || !sliderSerial->isOpen()) return;
+    sliderRxBuf.clear();
+    sliderSerial->write((cmd + "\n").toUtf8());
+    sliderSerial->flush();
+}
+
+void MainWindow::onSliderReadyRead()
+{
+    sliderRxBuf += QString::fromUtf8(sliderSerial->readAll());
+
+    if (sliderRxBuf.contains("Ready")) {
+        statusBar()->showMessage("三轴 ESP32 已就绪");
+        sliderSend("G90");
+        sliderRxBuf.clear();
+        return;
+    }
+
+    if (sliderRxBuf.contains(">")) {
+        updatePosDisplay(sliderRxBuf);
+        sliderRxBuf.clear();
+        sliderBusy = false;
+    }
+
+    if (sliderRxBuf.contains("ok")) {
+        sliderRxBuf.clear();
+        sliderBusy = false;
+        sliderSend("?");
+    }
+}
+
+void MainWindow::updatePosDisplay(const QString &resp)
+{
+    int s = resp.indexOf("MPos:");
+    if (s < 0) return;
+    s += 5;
+    int e = resp.indexOf('|', s);
+    if (e < 0) e = resp.indexOf('>', s);
+    if (e < 0) return;
+    QStringList parts = resp.mid(s, e - s).split(',');
+    if (parts.size() < 3) return;
+    posXVal->setText(parts[0].trimmed());
+    posYVal->setText(parts[1].trimmed());
+    posZVal->setText(parts[2].trimmed());
+}
+
+// ── 三轴点动 ────────────────────────────────────────────────────────
+void MainWindow::onJogXPlus()
+{
+    double step = jogStepSpinBox->value();
+    sliderSend(QString("G91\nG1 X%1 F%2\nG90").arg(step).arg(feedSpinBox->value()));
+}
+void MainWindow::onJogXMinus()
+{
+    double step = jogStepSpinBox->value();
+    sliderSend(QString("G91\nG1 X-%1 F%2\nG90").arg(step).arg(feedSpinBox->value()));
+}
+void MainWindow::onJogYPlus()
+{
+    double step = jogStepSpinBox->value();
+    sliderSend(QString("G91\nG1 Y%1 F%2\nG90").arg(step).arg(feedSpinBox->value()));
+}
+void MainWindow::onJogYMinus()
+{
+    double step = jogStepSpinBox->value();
+    sliderSend(QString("G91\nG1 Y-%1 F%2\nG90").arg(step).arg(feedSpinBox->value()));
+}
+void MainWindow::onJogZPlus()
+{
+    double step = jogStepSpinBox->value();
+    sliderSend(QString("G91\nG1 Z-%1 F%2\nG90").arg(step).arg(feedSpinBox->value()));
+}
+void MainWindow::onJogZMinus()
+{
+    double step = jogStepSpinBox->value();
+    sliderSend(QString("G91\nG1 Z%1 F%2\nG90").arg(step).arg(feedSpinBox->value()));
+}
+void MainWindow::onHome()
+{
+    statusBar()->showMessage("归零中，请等待...");
+    sliderSend("$H");
 }
