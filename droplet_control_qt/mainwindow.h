@@ -2,6 +2,8 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QSerialPort>
+#include <QTimer>
 
 class QLabel;
 class QPushButton;
@@ -18,6 +20,14 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+private slots:
+    void onGripperOpenPressed();
+    void onGripperOpenReleased();
+    void onGripperClosePressed();
+    void onGripperCloseReleased();
+    void doGripperOpen();
+    void doGripperClose();
+
 private:
     // 左侧：摄像头画面区
     QLabel *cameraView;
@@ -32,14 +42,23 @@ private:
     QPushButton *jogYPlusBtn, *jogYMinusBtn;
     QPushButton *jogZPlusBtn, *jogZMinusBtn;
     QPushButton *gripperOpenBtn, *gripperCloseBtn;
-    QPushButton *dropletReleaseBtn, *dropletAbsorbBtn;
-    QPushButton *homeBtn, *pickPlaceBtn;
+    QPushButton *homeBtn;
 
     // 右下：参数调试区
-    QSpinBox    *feedSpinBox;
-    QSpinBox    *gripForceSpinBox;
+    QSpinBox       *feedSpinBox;
+    QSpinBox       *gripForceSpinBox;
     QDoubleSpinBox *visionThreshSpinBox;
     QDoubleSpinBox *jogStepSpinBox;
+
+    // 夹爪串口
+    QSerialPort *gripperSerial;
+    QTimer      *gripperOpenTimer;
+    QTimer      *gripperCloseTimer;
+    int          gripperPosition;
+
+    void initGripperSerial();
+    void sendModbus(quint16 reg, quint16 value);
+    quint16 crc16(const QByteArray &data);
 
     void buildLayout();
     QGroupBox *buildStatusGroup();

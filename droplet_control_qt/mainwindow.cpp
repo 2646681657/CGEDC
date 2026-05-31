@@ -14,6 +14,7 @@
 #include <QFont>
 #include <QStatusBar>
 #include <QScrollArea>
+#include <QThread>
 
 // ── 小工具：带标题的数值标签对 ──────────────────────────────────────
 static QWidget *makeDataItem(const QString &title, QLabel *&valueOut,
@@ -181,29 +182,9 @@ QGroupBox *MainWindow::buildControlGroup()
     gripRow->addWidget(gripperCloseBtn);
     vl->addLayout(gripRow);
 
-    QFrame *sep3 = new QFrame; sep3->setFrameShape(QFrame::HLine); vl->addWidget(sep3);
-
-    // 液滴控制
-    QLabel *dropTitle = new QLabel("液滴控制");
-    dropTitle->setObjectName("titleLabel");
-    vl->addWidget(dropTitle);
-    QHBoxLayout *dropRow = new QHBoxLayout;
-    dropletReleaseBtn = new QPushButton("释放");
-    dropletAbsorbBtn  = new QPushButton("回收");
-    dropletReleaseBtn->setMinimumHeight(30);
-    dropletAbsorbBtn->setMinimumHeight(30);
-    dropRow->addWidget(dropletReleaseBtn);
-    dropRow->addWidget(dropletAbsorbBtn);
-    vl->addLayout(dropRow);
-
     QFrame *sep4 = new QFrame; sep4->setFrameShape(QFrame::HLine); vl->addWidget(sep4);
 
-    // 一键作业 + 急停
-    pickPlaceBtn = new QPushButton("一键取放");
-    pickPlaceBtn->setObjectName("startBtn");
-    pickPlaceBtn->setMinimumHeight(36);
-    vl->addWidget(pickPlaceBtn);
-
+    // 启动 / 停止 / 急停
     QHBoxLayout *ctrlRow = new QHBoxLayout;
     startBtn     = new QPushButton("启动");
     stopBtn      = new QPushButton("停止");
@@ -301,11 +282,129 @@ void MainWindow::buildLayout()
 
 // ── 构造 / 析构 ─────────────────────────────────────────────────────
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
+    : QMainWindow(parent), gripperPosition(500)
 {
     setWindowTitle("液滴无损微物体搬运系统");
     resize(1024, 600);
     buildLayout();
+    initGripperSerial();
+
+    // 夹爪长按定时器
+    gripperOpenTimer  = new QTimer(this);
+    gripperCloseTimer = new QTimer(this);
+    gripperOpenTimer->setInterval(120);
+    gripperCloseTimer->setInterval(120);
+    connect(gripperOpenTimer,  &QTimer::timeout, this, &MainWindow::doGripperOpen);
+    connect(gripperCloseTimer, &QTimer::timeout, this, &MainWindow::doGripperClose);
+
+    // 夹爪按钮信号
+    connect(gripperOpenBtn,  &QPushButton::pressed,  this, &MainWindow::onGripperOpenPressed);
+    connect(gripperOpenBtn,  &QPushButton::released, this, &MainWindow::onGripperOpenReleased);
+    connect(gripperCloseBtn, &QPushButton::pressed,  this, &MainWindow::onGripperClosePressed);
+    connect(gripperCloseBtn, &QPushButton::released, this, &MainWindow::onGripperCloseReleased);
 }
 
-MainWindow::~MainWindow() {}
+MainWindow::~MainWindow()
+{
+    if (gripperSerial && gripperSerial->isOpen())
+        gripperSerial->close();
+}
+
+// ── 夹爪串口初始化 ───────────────────────────────────────────────────
+void MainWindow::initGripperSerial()
+{
+    gripperSerial = new QSerialPort(this);
+    gripperSerial->setPortName("/dev/ttyUSB0");
+    gripperSerial->setBaudRate(QSerialPort::Baud115200);
+    gripperSerial->setDataBits(QSerialPort::Data8);
+    gripperSerial->setParity(QSerialPort::NoParity);
+    gripperSerial->setStopBits(QSerialPort::OneStop);
+    gripperSerial->setFlowControl(QSerialPort::NoFlowControl);
+
+    if (!gripperSerial->open(QIODevice::ReadWrite)) {
+        statusBar()->showMessage("夹爪串口打开失败: " + gripperSerial->errorString());
+        gripperOpenBtn->setEnabled(false);
+        gripperCloseBtn->setEnabled(false);
+        return;
+    }
+
+    // 初始化使能
+    sendModbus(0x0100, 1);
+    QThread::msleep(2000);
+    statusBar()->showMessage("夹爪已就绪  /dev/ttyUSB0");
+}
+
+// ── Modbus RTU 发送 ──────────────────────────────────────────────────
+void MainWindow::sendModbus(quint16 reg, quint16 value)
+{
+    QByteArray frame;
+    frame.append((char)0x01);
+    frame.append((char)0x06);
+    frame.append((char)(reg >> 8));
+    frame.append((char)(reg & 0xFF));
+    frame.append((char)(value >> 8));
+    frame.append((char)(value & 0xFF));
+    quint16 crc = crc16(frame);
+    frame.append((char)(crc & 0xFF));
+    frame.append((char)(crc >> 8));
+    gripperSerial->write(frame);
+    gripperSerial->flush();
+}
+
+quint16 MainWindow::crc16(const QByteArray &data)
+{
+    quint16 crc = 0xFFFF;
+    for (int i = 0; i < data.size(); ++i) {
+        crc ^= (quint8)data[i];
+        for (int j = 0; j < 8; ++j)
+            crc = (crc & 0x0001) ? (crc >> 1) ^ 0xA001 : crc >> 1;
+    }
+    return crc;
+}
+
+// ── 夹爪长按逻辑 ────────────────────────────────────────────────────
+void MainWindow::onGripperOpenPressed()
+{
+    gripperCloseTimer->stop();
+    doGripperOpen();
+    gripperOpenTimer->start();
+}
+
+void MainWindow::onGripperOpenReleased()
+{
+    gripperOpenTimer->stop();
+    statusBar()->showMessage(QString("夹爪停止，位置: %1").arg(gripperPosition));
+}
+
+void MainWindow::onGripperClosePressed()
+{
+    gripperOpenTimer->stop();
+    doGripperClose();
+    gripperCloseTimer->start();
+}
+
+void MainWindow::onGripperCloseReleased()
+{
+    gripperCloseTimer->stop();
+    statusBar()->showMessage(QString("夹爪停止，位置: %1").arg(gripperPosition));
+}
+
+void MainWindow::doGripperOpen()
+{
+    gripperPosition = qMin(gripperPosition + 15, 1000);
+    sendModbus(0x0101, (quint16)gripForceSpinBox->value());
+    QThread::msleep(20);
+    sendModbus(0x0104, 10);
+    QThread::msleep(20);
+    sendModbus(0x0103, (quint16)gripperPosition);
+}
+
+void MainWindow::doGripperClose()
+{
+    gripperPosition = qMax(gripperPosition - 15, 0);
+    sendModbus(0x0101, (quint16)gripForceSpinBox->value());
+    QThread::msleep(20);
+    sendModbus(0x0104, 10);
+    QThread::msleep(20);
+    sendModbus(0x0103, (quint16)gripperPosition);
+}
