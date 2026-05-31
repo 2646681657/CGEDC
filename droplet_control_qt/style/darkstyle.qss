@@ -1,0 +1,157 @@
+/* ===== 全局背景 ===== */
+QMainWindow, QWidget {
+    background-color: #1a1e2e;
+    color: #c8d0e0;
+    font-family: "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
+    font-size: 13px;
+}
+
+/* ===== 分组框 ===== */
+QGroupBox {
+    border: 1px solid #2e3a50;
+    border-radius: 4px;
+    margin-top: 8px;
+    padding-top: 6px;
+    color: #7eb8f7;
+    font-size: 13px;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 6px;
+    color: #7eb8f7;
+}
+
+/* ===== 标签 ===== */
+QLabel {
+    color: #c8d0e0;
+}
+QLabel#valueLabel {
+    color: #4fc3f7;
+    font-size: 15px;
+    font-weight: bold;
+}
+QLabel#titleLabel {
+    color: #7eb8f7;
+    font-size: 12px;
+}
+
+/* ===== 普通按钮 ===== */
+QPushButton {
+    background-color: #253048;
+    color: #c8d0e0;
+    border: 1px solid #3a4a6a;
+    border-radius: 4px;
+    padding: 6px 12px;
+    min-height: 32px;
+}
+QPushButton:hover {
+    background-color: #2e3d5c;
+    border-color: #5a7ab0;
+}
+QPushButton:pressed {
+    background-color: #1e2d48;
+}
+QPushButton:disabled {
+    background-color: #1e2535;
+    color: #4a5568;
+    border-color: #2a3448;
+}
+
+/* ===== 危险按钮（急停） ===== */
+QPushButton#emergencyBtn {
+    background-color: #7b1a1a;
+    color: #ffcccc;
+    border: 1px solid #c0392b;
+    font-weight: bold;
+    font-size: 14px;
+}
+QPushButton#emergencyBtn:hover {
+    background-color: #a02020;
+}
+QPushButton#emergencyBtn:pressed {
+    background-color: #5a1010;
+}
+
+/* ===== 启动按钮 ===== */
+QPushButton#startBtn {
+    background-color: #1a4a2e;
+    color: #a0e0b0;
+    border: 1px solid #2e7a4e;
+}
+QPushButton#startBtn:hover {
+    background-color: #1e5a38;
+}
+
+/* ===== 停止按钮 ===== */
+QPushButton#stopBtn {
+    background-color: #3a2a10;
+    color: #e0c080;
+    border: 1px solid #7a5a20;
+}
+QPushButton#stopBtn:hover {
+    background-color: #4a3a18;
+}
+
+/* ===== 滑块 ===== */
+QSlider::groove:horizontal {
+    height: 4px;
+    background: #2e3a50;
+    border-radius: 2px;
+}
+QSlider::handle:horizontal {
+    background: #4a90d9;
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+}
+QSlider::sub-page:horizontal {
+    background: #4a90d9;
+    border-radius: 2px;
+}
+
+/* ===== 数值输入框 ===== */
+QSpinBox, QDoubleSpinBox {
+    background-color: #1e2840;
+    color: #c8d0e0;
+    border: 1px solid #2e3a50;
+    border-radius: 3px;
+    padding: 2px 4px;
+    min-height: 24px;
+}
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border-color: #4a90d9;
+}
+
+/* ===== 下拉框 ===== */
+QComboBox {
+    background-color: #1e2840;
+    color: #c8d0e0;
+    border: 1px solid #2e3a50;
+    border-radius: 3px;
+    padding: 2px 8px;
+    min-height: 28px;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+QComboBox QAbstractItemView {
+    background-color: #1e2840;
+    color: #c8d0e0;
+    selection-background-color: #2e4a7a;
+}
+
+/* ===== 状态栏 ===== */
+QStatusBar {
+    background-color: #141824;
+    color: #7eb8f7;
+    border-top: 1px solid #2e3a50;
+}
+
+/* ===== 分隔线 ===== */
+QFrame[frameShape="4"], QFrame[frameShape="5"] {
+    color: #2e3a50;
+}
