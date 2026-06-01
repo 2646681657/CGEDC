@@ -294,7 +294,6 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowTitle("液滴无损微物体搬运系统");
     resize(1024, 600);
     buildLayout();
-    initGripperSerial();
 
     // 夹爪长按定时器
     gripperOpenTimer  = new QTimer(this);
@@ -319,7 +318,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(jogZMinusBtn, &QPushButton::clicked, this, &MainWindow::onJogZMinus);
     connect(homeBtn,      &QPushButton::clicked, this, &MainWindow::onHome);
 
-    initSliderSerial();
+    // 串口延迟初始化（不阻塞界面启动）
+    QTimer::singleShot(500, this, [this]() { initGripperSerial(); });
+    QTimer::singleShot(600, this, [this]() { initSliderSerial();  });
+
     initCamera();
 }
 
@@ -352,10 +354,12 @@ void MainWindow::initGripperSerial()
         return;
     }
 
-    // 初始化使能
+    // 初始化使能（用 QTimer 延迟，不阻塞主线程）
+    QTimer::singleShot(2000, this, [this]() {
+        statusBar()->showMessage("夹爪已就绪  /dev/ttyUSB0");
+    });
     sendModbus(0x0100, 1);
-    QThread::msleep(2000);
-    statusBar()->showMessage("夹爪已就绪  /dev/ttyUSB0");
+    statusBar()->showMessage("夹爪初始化中...");
 }
 
 // ── Modbus RTU 发送 ──────────────────────────────────────────────────
