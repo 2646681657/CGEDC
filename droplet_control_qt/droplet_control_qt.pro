@@ -7,10 +7,20 @@ TEMPLATE = app
 
 SOURCES += \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    camerathread.cpp
 
 HEADERS += \
-    mainwindow.h
+    mainwindow.h \
+    camerathread.h
 
 RESOURCES += \
     resources.qrc
+
+# OpenCV
+INCLUDEPATH += /usr/include/opencv4 /usr/include/opencv2
+LIBS += -L/usr/lib \
+    -lopencv_core \
+    -lopencv_imgproc \
+    -lopencv_videoio \
+    -lopencv_imgcodecs

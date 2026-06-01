@@ -5,6 +5,8 @@
 #include <QSerialPort>
 #include <QTimer>
 
+class CameraThread;
+
 class QLabel;
 class QPushButton;
 class QGroupBox;
@@ -39,6 +41,9 @@ private slots:
 
     // 三轴串口响应
     void onSliderReadyRead();
+
+    // 摄像头帧
+    void onFrameReady(const QImage &img);
 
 private:
     // 左侧：摄像头画面区
@@ -81,6 +86,10 @@ private:
     void initSliderSerial();
     void sliderSend(const QString &cmd);
     void updatePosDisplay(const QString &resp);
+
+    // 摄像头
+    CameraThread *camThread;
+    void initCamera();
 
     void buildLayout();
     QGroupBox *buildStatusGroup();

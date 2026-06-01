@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "camerathread.h"
 
 #include <QLabel>
 #include <QPushButton>
@@ -15,6 +16,7 @@
 #include <QStatusBar>
 #include <QScrollArea>
 #include <QThread>
+#include <QPixmap>
 
 // ── 小工具：带标题的数值标签对 ──────────────────────────────────────
 static QWidget *makeDataItem(const QString &title, QLabel *&valueOut,
@@ -318,6 +320,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(homeBtn,      &QPushButton::clicked, this, &MainWindow::onHome);
 
     initSliderSerial();
+    initCamera();
 }
 
 MainWindow::~MainWindow()
@@ -326,6 +329,9 @@ MainWindow::~MainWindow()
         gripperSerial->close();
     if (sliderSerial && sliderSerial->isOpen())
         sliderSerial->close();
+    if (camThread) {
+        camThread->stop();
+    }
 }
 
 // ── 夹爪串口初始化 ───────────────────────────────────────────────────
@@ -538,4 +544,22 @@ void MainWindow::onHome()
 {
     statusBar()->showMessage("归零中，请等待...");
     sliderSend("$H");
+}
+
+// ── 摄像头 ───────────────────────────────────────────────────────────
+void MainWindow::initCamera()
+{
+    camThread = new CameraThread(0, this);
+    connect(camThread, &CameraThread::frameReady,
+            this, &MainWindow::onFrameReady);
+    camThread->start();
+}
+
+void MainWindow::onFrameReady(const QImage &img)
+{
+    cameraView->setPixmap(
+        QPixmap::fromImage(img).scaled(
+            cameraView->size(),
+            Qt::KeepAspectRatio,
+            Qt::SmoothTransformation));
 }
